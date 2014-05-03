@@ -3,9 +3,16 @@ php-built-in-web-server
 
 内置PHP解析器的高性能Web Server
 
-===使用或借鉴===
+架构与实现借鉴webdis
+
+===相关链接===
+
+https://github.com/nicolasff/webdis
 
 http://libevent.org/
-https://github.com/joyent/http-parser
+
 http://www.php.net/
-http://memcached.org/ 
+
+https://github.com/joyent/http-parser
+
+https://github.com/akheron/jansson
