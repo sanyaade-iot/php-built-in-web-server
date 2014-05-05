@@ -7,6 +7,7 @@
 #include "request.h"
 #include "server.h"
 #include "slog.h"
+#include "embed.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -71,21 +72,6 @@ void cmd_setup(struct cmd *cmd, struct http_client *client) {
 	cmd->http_version = client->http_version;
 }
 
-static int php_embed_ub_write_4_pbiws(const char *str, uint str_length TSRMLS_DC)
-{
-    const char *ptr = str;
-	struct server_request *request = SG(server_context);
-
-	http_response_add_body(request->resp, ptr, (size_t) str_length);
-
-    return str_length;
-}
-
-static void php_embed_flush_4_pbiws(void *server_context)
-{
-
-}
-
 cmd_response_t cmd_run(struct worker *w, struct http_client *client,
 		const char *uri, size_t uri_len,
 		const char *body, size_t body_len) {
@@ -116,39 +102,21 @@ cmd_response_t cmd_run(struct worker *w, struct http_client *client,
 	/* add HTTP info */
 	cmd_setup(cmd, client);
 
-    int argc = 0;
-    char **argv = NULL;
-
-	zend_file_handle script;
-
-	/* Set up a File Handle structure */
-	script.type = ZEND_HANDLE_FP;
-	script.filename = fpath;
-	script.opened_path = NULL;
-	script.free_filename = 0;
-
-	if (!(script.handle.fp = fopen(script.filename, "rb"))) {
-		return CMD_PARAM_ERROR;
-	}
-
 	resp = http_response_init(cmd->w, 200, "OK");
 	resp->http_version = cmd->http_version;
 
-	struct server_request request;
-	request.client = client;
-	request.resp = resp;
+	struct server_request *request;
+	request = malloc(sizeof(request));
+	request->client = client;
+	request->resp = resp;
 
-	php_embed_module.ub_write = php_embed_ub_write_4_pbiws;
-	php_embed_module.flush = php_embed_flush_4_pbiws;
-
-    PHP_EMBED_START_BLOCK(argc, argv)
-		SG(server_context) = (void *) &request;
-    	php_execute_script(&script TSRMLS_CC);
-	PHP_EMBED_END_BLOCK()
+	int ret = embed_execute(fpath, request);
+	(void) ret;
 
 	/* http_response_set_keep_alive(resp, cmd->keep_alive); */
 	http_response_write(resp, client->fd);
 
+	free(request);
 	free(fpath);
     cmd_free(cmd);
 

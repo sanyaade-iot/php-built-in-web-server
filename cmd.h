@@ -4,7 +4,6 @@
 
 #include <stdlib.h>
 #include <sys/queue.h>
-#include <sapi/embed/php_embed.h>
 
 struct http_client;
 struct server;

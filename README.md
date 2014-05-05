@@ -14,5 +14,3 @@ http://libevent.org/
 http://www.php.net/
 
 https://github.com/joyent/http-parser
-
-https://github.com/akheron/jansson

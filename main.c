@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         s = server_new(argv[1]);
     } else {
-        s = server_new("conf.json");
+        s = server_new("pbiws.conf");
     }
 
     server_start(s);
