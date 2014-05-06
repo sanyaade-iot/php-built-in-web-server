@@ -11,6 +11,13 @@
 #include "conf.h"
 #include "util.h"
 
+void argv_free(char **str, int count) {
+    if (!str) return;
+    while (count--)
+        free(str[count]);
+    free(str);
+}
+
 struct conf *conf_read(const char *filename) {
     struct conf *conf;
 
@@ -43,14 +50,14 @@ struct conf *conf_read(const char *filename) {
 
         while(fgets(buf, 4096, fp) != NULL) {
             line = strdup(buf);
-            line = sdstrim(line, " \t\r\n");
+            line = str_trim(line, " \t\r\n");
 
             if (line[0] == '#' || line[0] == '\0') {
                 free(line);
                 continue;
             }
 
-            argv = strsplit(line, strlen(line), " ", 1, &argc);
+            argv = str_split(line, strlen(line), " ", 1, &argc);
             if (argc == 2) {
                 if (strcmp(argv[0], "http_host") == 0) {
                     free(conf->http_host);
@@ -87,7 +94,7 @@ struct conf *conf_read(const char *filename) {
                 }
             }
 
-            strfree(argv, argc);
+            argv_free(argv, argc);
             free(line);
         }
 

@@ -7,7 +7,7 @@
 /**
  * Steal from redis
  */
-char **strsplit(char *s, int len, char *sep, int seplen, int *count) {
+char **str_split(char *s, int len, char *sep, int seplen, int *count) {
     int elements = 0, slots = 5, start = 0, j;
     char **tokens;
 
@@ -64,7 +64,7 @@ cleanup:
     }
 }
 
-char *sdstrim(char *s, const char *cset) {
+char *str_trim(char *s, const char *cset) {
     char *start, *end, *sp, *ep;
     size_t len;
 
@@ -82,11 +82,4 @@ char *sdstrim(char *s, const char *cset) {
     }
 
     return s;
-}
-
-void strfree(char **str, int count) {
-    if (!str) return;
-    while (count--)
-        free(str[count]);
-    free(str);
 }
