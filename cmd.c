@@ -88,10 +88,10 @@ cmd_response_t cmd_run(struct worker *w, struct http_client *client,
 	size_t fpath_len;
 	char *fpath;
 
-	fpath_len = uri_len + strlen(client->w->s->cfg->http.servers[0]->root);
+	fpath_len = uri_len + strlen(client->match_server->root);
 	fpath = malloc((fpath_len + 1) * sizeof(char));
-	memcpy(fpath, client->w->s->cfg->http.servers[0]->root, strlen(client->w->s->cfg->http.servers[0]->root));
-	memcpy(fpath + strlen(client->w->s->cfg->http.servers[0]->root), uri, uri_len);
+	memcpy(fpath, client->match_server->root, strlen(client->match_server->root));
+	memcpy(fpath + strlen(client->match_server->root), uri, uri_len);
 	fpath[fpath_len] = 0;
 
 	slog(w->s, LOG_DEBUG, fpath, fpath_len);

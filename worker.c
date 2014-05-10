@@ -134,6 +134,12 @@ void worker_process_client(struct http_client *c) {
 
     slog(w->s, LOG_DEBUG, c->path, c->path_sz);
 
+    if (!c->match_server) {
+        slog(w->s, LOG_DEBUG, "404", 3);
+        http_send_error(c, 404, "Not Found");
+        return;
+    }
+
     switch (c->parser.method) {
         case HTTP_GET:
             ret = cmd_run(c->w, c, c->path, c->path_sz, NULL, 0);

@@ -27,6 +27,7 @@ struct http_client {
 
     struct worker *w;
     struct server *s;
+    struct server_cfg *match_server;
 
     /* HTTP parsing */
     struct http_parser parser;

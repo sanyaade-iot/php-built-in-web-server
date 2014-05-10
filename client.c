@@ -119,6 +119,43 @@ static int http_client_on_header_value(struct http_parser *p, const char *at, si
         if (sz == 10 && strncasecmp(at, "Keep-Alive", sz) == 0) {
             c->keep_alive = 1;
         }
+    } else if (strncmp("Host", c->headers[n-1].key, c->headers[n-1].key_sz) == 0) {
+        if (!strchr(c->headers[n-1].val, ':')) {
+            CHECK_ALLOC(c, c->headers[n-1].val = realloc(c->headers[n-1].val, c->headers[n-1].val_sz + 3 + 1));
+            memcpy(c->headers[n-1].val + c->headers[n-1].val_sz, ":80", 3);
+            c->headers[n-1].val_sz += 3;
+            c->headers[n-1].val[c->headers[n-1].val_sz] = 0;
+        }
+    }
+
+    slog(c->w->s, LOG_DEBUG, c->headers[n-1].key, c->headers[n-1].key_sz);
+    slog(c->w->s, LOG_DEBUG, c->headers[n-1].val, c->headers[n-1].val_sz);
+
+    return 0;
+}
+
+static int http_client_on_headers_complete(struct http_parser *p) {
+    struct http_client *c = p->data;
+    size_t n = c->header_count;
+    char host_port[256];
+    size_t i, len;
+    int j;
+
+    for (i = 0; i < n; i++) {
+        if (strncmp("Host", c->headers[i].key, c->headers[i].key_sz) == 0) {
+            j = 0;
+            while(c->w->s->cfg->http.servers[j] != NULL) {
+                len = sprintf(host_port, "%s:%d", c->w->s->cfg->http.servers[j]->server_name, c->w->s->cfg->http.servers[j]->listen);
+
+                if (c->headers[i].val_sz == len && strncmp(c->headers[i].val, host_port, c->headers[i].val_sz) == 0) {
+                    c->match_server = c->w->s->cfg->http.servers[j];
+                    break;
+                }
+
+                j++;
+            }
+            break;
+        }
     }
 
     return 0;
@@ -166,6 +203,7 @@ struct http_client *http_client_new(struct worker *w, int fd, in_addr_t addr) {
     c->settings.on_url = http_client_on_url;
     c->settings.on_header_field = http_client_on_header_name;
     c->settings.on_header_value = http_client_on_header_value;
+    c->settings.on_headers_complete = http_client_on_headers_complete;
     c->settings.on_body = http_client_on_body;
     c->settings.on_message_complete = http_client_on_message_complete;
 

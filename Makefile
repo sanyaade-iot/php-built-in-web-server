@@ -22,5 +22,4 @@ $(OUT): $(OBJS) Makefile
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 clean:
-	rm -r conf.c
 	rm -f $(OBJS) $(OUT)
