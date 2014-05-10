@@ -2,31 +2,73 @@
 #ifndef CONF_H
 #define CONF_H
 
-#include <sys/types.h>
+#include "util.h"
 #include "slog.h"
 
+#include <stdbool.h>
+
+//config struct defined here
+struct rewrite_cfg {
+    bool engine;
+    bool exist;
+    struct str_array rules;
+};
+
+struct server_cfg {
+    char *root;
+    bool autoindex;
+    bool proxy;
+    bool facade;
+    char **error_page;
+    char **index;
+    char *server_name;
+    char *fastcgi_pass;
+    int listen;
+    char *auth_basic;
+    char *auth_basic_user_file;
+    struct rewrite_cfg rewrite;
+    struct str_array upstream;
+};
+
+struct events_cfg{
+    int worker_connections;
+};
+
+struct http_cfg{
+    bool sendfile;
+    bool tcp_nopush;
+    bool tcp_nodelay;
+    int keepalive_timeout;
+    int types_hash_max_size;
+    bool server_tokens;
+    int server_names_hash_bucket_size;
+    char *access_log;
+    char *error_log;
+    char *default_type;
+    bool gzip;
+    char *gzip_disable;
+    bool gzip_vary;
+    char *gzip_proxied;
+    int gzip_comp_level;
+    char *gzip_http_version;
+    char **gzip_types;
+    struct server_cfg **servers;
+};
+
 struct conf {
-    /* HTTP server interface */
-    char *http_host;
-    short http_port;
-    short http_threads;
-    size_t http_max_request_size;
+    char *user;
+    int worker_processes;
+    char *pid;
+    char *mimefile;
+    struct events_cfg events;
+    struct http_cfg http;
 
-    /* daemonize process, off by default */
     int daemonize;
-    char *pidfile;
-
-    /* user/group */
-    uid_t user;
-    gid_t group;
-
-    /* Logging */
     char *logfile;
     log_level verbosity;
-
-    /* Request to serve on "/" */
-    char *default_root;
 };
+
+struct conf *conf;
 
 struct conf *conf_read(const char *filename);
 void conf_free(struct conf *conf);

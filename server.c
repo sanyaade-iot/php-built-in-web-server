@@ -3,6 +3,7 @@
 #include "worker.h"
 #include "client.h"
 #include "conf.h"
+#include "util.h"
 #include "version.h"
 
 #include <stdio.h>
@@ -18,60 +19,99 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 
+static void server_can_accept(int fd, short event, void *ptr);
+
 /**
  * Sets up a non-blocking socket
  */
-static int socket_setup(struct server *s, const char *ip, short port) {
-    int reuse = 1;
-    struct sockaddr_in addr;
-    int fd, ret;
+static int socket_setup(struct server *s, struct server_cfg **servers) {
+    int servers_num = 0;
+    int i = 0;
+    int ports_num = 0;
 
-    memset(&addr, 0, sizeof(addr));
+    // stat server conf num
+    while (servers[servers_num++] != NULL);
+    servers_num--;
+
+    // stat distinct listen port num
+    int *servers_port = (int *)malloc(sizeof(int) * servers_num);
+    for(i = 0; i < servers_num; i++) {
+        int listen_port = servers[i]->listen;
+        if(in_int_array(servers_port, listen_port, ports_num) == -1) {
+            servers_port[ports_num++] = listen_port;
+        }
+    }
+
+    for(i = 0; i < ports_num; i++) {
+        int reuse = 1;
+        struct sockaddr_in addr;
+        int fd, ret;
+
+        memset(&addr, 0, sizeof(addr));
 
 #if defined __BSD__
-    addr.sin_len = sizeof(struct sockaddr_in);
+        addr.sin_len = sizeof(struct sockaddr_in);
 #endif
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(servers_port[i]);
+        addr.sin_addr.s_addr = INADDR_ANY;
 
-    addr.sin_addr.s_addr = inet_addr(ip);
+        /* create socket */
+        fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (-1 == fd) {
+            slog(s, LOG_ERROR, strerror(errno), 0);
+            free(servers_port);
+            return -1;
+        }
 
-    /* create socket */
-    fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (-1 == fd) {
-        slog(s, LOG_ERROR, strerror(errno), 0);
-        return -1;
+        /* reuse address if we've bound to it before. */
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+            slog(s, LOG_ERROR, strerror(errno), 0);
+            free(servers_port);
+            return -1;
+        }
+
+        /* set socket as non-blocking. */
+        ret = fcntl(fd, F_SETFD, O_NONBLOCK);
+        if (0 != ret) {
+            slog(s, LOG_ERROR, strerror(errno), 0);
+            free(servers_port);
+            return -1;
+        }
+
+        /* bind */
+        ret = bind(fd, (struct sockaddr*) &addr, sizeof(addr));
+        if (0 != ret) {
+            slog(s, LOG_ERROR, strerror(errno), 0);
+            free(servers_port);
+            return -1;
+        }
+
+        /* listen */
+        ret = listen(fd, SOMAXCONN);
+        if (0 != ret) {
+            slog(s, LOG_ERROR, strerror(errno), 0);
+            free(servers_port);
+            return -1;
+        }
+
+        /* set keepalive socket option to do with half connection */
+        int keep_alive = 1;
+        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *) &keep_alive, sizeof(keep_alive));
+
+        /* start http server */
+        struct event *ev = event_new(s->base, fd, EV_READ | EV_PERSIST, server_can_accept, (void*) s);
+        ret = event_add(ev, NULL);
+
+        if (ret < 0) {
+            slog(s, LOG_ERROR, "Error calling event_add on socket", 0);
+            free(servers_port);
+            return -1;
+        }
     }
+    free(servers_port);
 
-    /* reuse address if we've bound to it before. */
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-        slog(s, LOG_ERROR, strerror(errno), 0);
-        return -1;
-    }
-
-    /* set socket as non-blocking. */
-    ret = fcntl(fd, F_SETFD, O_NONBLOCK);
-    if (0 != ret) {
-        slog(s, LOG_ERROR, strerror(errno), 0);
-        return -1;
-    }
-
-    /* bind */
-    ret = bind(fd, (struct sockaddr*) &addr, sizeof(addr));
-    if (0 != ret) {
-        slog(s, LOG_ERROR, strerror(errno), 0);
-        return -1;
-    }
-
-    /* listen */
-    ret = listen(fd, SOMAXCONN);
-    if (0 != ret) {
-        slog(s, LOG_ERROR, strerror(errno), 0);
-        return -1;
-    }
-
-    /* there you go, ready to accept! */
-    return fd;
+    return 0;
 }
 
 struct server *server_new(const char *cfg_file) {
@@ -82,8 +122,8 @@ struct server *server_new(const char *cfg_file) {
     s->cfg = conf_read(cfg_file);
 
     /* workers */
-    s->w = calloc(s->cfg->http_threads, sizeof(struct worker*));
-    for (i = 0; i < s->cfg->http_threads; ++i) {
+    s->w = calloc(s->cfg->worker_processes, sizeof(struct worker*));
+    for (i = 0; i < s->cfg->worker_processes; ++i) {
         s->w[i] = worker_new(s);
     }
 
@@ -115,7 +155,7 @@ static void server_can_accept(int fd, short event, void *ptr) {
         worker_add_client(w, c);
 
         /* loop over ring of workers */
-        s->next_worker = (s->next_worker + 1) % s->cfg->http_threads;
+        s->next_worker = (s->next_worker + 1) % s->cfg->worker_processes;
     } else { /* too many connections */
         slog(s, LOG_NOTICE, "Too many connections", 0);
     }
@@ -182,7 +222,7 @@ int server_start(struct server *s) {
     s->base = event_base_new();
 
     if (s->cfg->daemonize) {
-        server_daemonize(s->cfg->pidfile);
+        server_daemonize(s->cfg->pid);
 
         /* sometimes event mech gets lost on fork */
         if (event_reinit(s->base) != 0) {
@@ -201,30 +241,17 @@ int server_start(struct server *s) {
     server_install_signal_handlers(s);
 
     /* start worker threads */
-    for (i = 0; i < s->cfg->http_threads; ++i) {
+    for (i = 0; i < s->cfg->worker_processes; ++i) {
         worker_start(s->w[i]);
     }
 
     /* create socket */
-    s->fd = socket_setup(s, s->cfg->http_host, s->cfg->http_port);
-    if (s->fd < 0) {
-        return -1;
-    }
+	ret = socket_setup(s, s->cfg->http.servers);
+    if(ret < 0) {
+		return -1;
+	}
 
-    /* set keepalive socket option to do with half connection */
-    int keep_alive = 1;
-    setsockopt(s->fd, SOL_SOCKET, SO_KEEPALIVE, (void *) &keep_alive, sizeof(keep_alive));
-
-    /* start http server */
-
-    struct event *ev = event_new(s->base, s->fd, EV_READ | EV_PERSIST, server_can_accept, (void*) s);
-    ret = event_add(ev, NULL);
-
-    if (ret < 0) {
-        slog(s, LOG_ERROR, "Error calling event_add on socket", 0);
-        return -1;
-    }
-
+    /* dispatch */
     slog(s, LOG_INFO, "pbiws " PBIWS_VERSION " up and running", 0);
     event_base_dispatch(s->base);
 

@@ -9,8 +9,6 @@ struct worker;
 struct conf;
 
 struct server {
-    int fd;
-
     struct event_base *base;
 
     struct conf *cfg;

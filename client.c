@@ -14,6 +14,27 @@
 
 #define CHECK_ALLOC(c, prt) if(!(prt)) { c->failed_alloc = 1; return -1; }
 
+void
+dump_url (const char *url, const struct http_parser_url *u)
+{
+  unsigned int i;
+
+  printf("\tfield_set: 0x%x, port: %u\n", u->field_set, u->port);
+  for (i = 0; i < UF_MAX; i++) {
+    if ((u->field_set & (1 << i)) == 0) {
+      printf("\tfield_data[%u]: unset\n", i);
+      continue;
+    }
+
+    printf("\tfield_data[%u]: off: %u len: %u part: \"%.*s\n",
+           i,
+           u->field_data[i].off,
+           u->field_data[i].len,
+           u->field_data[i].len,
+           url + u->field_data[i].off);
+  }
+}
+
 static int http_client_on_url(struct http_parser *p, const char *at, size_t sz) {
     struct http_client *c = p->data;
 
@@ -21,6 +42,16 @@ static int http_client_on_url(struct http_parser *p, const char *at, size_t sz) 
     memcpy(c->path + c->path_sz, at, sz);
     c->path_sz += sz;
     c->path[c->path_sz] = 0;
+
+    struct http_parser_url u;
+
+    int result = http_parser_parse_url(c->path, c->path_sz, 0, &u);
+    if (result != 0) {
+        printf("Parse error : %d\n", result);
+    } else {
+        printf("Parse ok, result : \n");
+        dump_url(c->path, &u);
+    }
 
     return 0;
 }
@@ -64,29 +95,6 @@ static int http_client_on_header_name(struct http_parser *p, const char *at, siz
     return 0;
 }
 
-static char *wrap_filename(const char *val, size_t val_len) {
-    char format[] = "attachment; filename=\"";
-    size_t sz = sizeof(format) - 1 + val_len + 1;
-    char *p = calloc(sz + 1, 1);
-
-    memcpy(p, format, sizeof(format) - 1); /* copy format */
-    memcpy(p + sizeof(format) - 1, val, val_len); /* copy filename */
-    p[sz-1] = '"';
-
-    return p;
-}
-
-/**
- * Split query string into key/value pairs, process some of them.
- */
-static int http_client_on_query_string(struct http_parser *p, const char *at, size_t sz) {
-    (void) p;
-    (void) at;
-    (void) sz;
-
-    return 0;
-}
-
 static int http_client_on_header_value(struct http_parser *p, const char *at, size_t sz) {
     struct http_client *c = p->data;
     size_t n = c->header_count;
@@ -125,6 +133,8 @@ static int http_client_on_message_complete(struct http_parser *p) {
     }
     c->http_version = c->parser.http_minor;
 
+    /* client info */
+
     worker_process_client(c);
     http_client_reset(c);
 
@@ -144,12 +154,20 @@ struct http_client *http_client_new(struct worker *w, int fd, in_addr_t addr) {
     c->parser.data = c;
 
     /* callbacks */
+    /* on_message_begin
+     * on_url
+     * on_status
+     * on_header_field
+     * on_header_value
+     * on_headers_complete
+     * on_body
+     * on_message_complete
+     */
     c->settings.on_url = http_client_on_url;
-    /* c->settings.on_query_string = http_client_on_query_string; */
-    c->settings.on_body = http_client_on_body;
-    c->settings.on_message_complete = http_client_on_message_complete;
     c->settings.on_header_field = http_client_on_header_name;
     c->settings.on_header_value = http_client_on_header_value;
+    c->settings.on_body = http_client_on_body;
+    c->settings.on_message_complete = http_client_on_message_complete;
 
     c->last_cb = LAST_CB_NONE;
 

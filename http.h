@@ -44,9 +44,7 @@ void http_response_set_body(struct http_response *r, const char *body, size_t bo
 void http_response_add_body(struct http_response *r, const char *body, size_t body_len);
 void http_response_write(struct http_response *r, int fd);
 void http_schedule_write(int fd, struct http_response *r);
-void http_crossdomain(struct http_client *c);
 void http_send_error(struct http_client *c, short code, const char *msg);
-void http_send_options(struct http_client *c);
 void http_response_write_chunk(int fd, struct worker *w, const char *p, size_t sz);
 void http_response_set_keep_alive(struct http_response *r, int enabled);
 

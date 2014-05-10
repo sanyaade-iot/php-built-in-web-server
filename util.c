@@ -83,3 +83,13 @@ char *str_trim(char *s, const char *cset) {
 
     return s;
 }
+
+int in_int_array(int *array, int needle, int length) {
+    int i;
+    for(i = 0; i < length; i++) {
+        if(array[i] == needle) {
+            return i;
+        }
+    }
+    return -1;
+}

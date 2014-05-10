@@ -45,6 +45,8 @@ struct http_client {
     /* HTTP data */
     char *path;
     size_t path_sz;
+    char *query_string;
+    size_t query_stirng_sz;
 
     /* headers */
     struct http_header *headers;

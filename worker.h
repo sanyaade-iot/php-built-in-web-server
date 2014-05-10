@@ -4,6 +4,8 @@
 
 #include <pthread.h>
 
+#define MAX_REQUEST_SIZE 128*1024*1024
+
 struct http_client;
 
 struct worker {

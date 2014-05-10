@@ -22,5 +22,7 @@
 *.x86_64
 *.hex
 main
-server.log
+*.pid
+*.log
+conf.c
 libphp5.dylib

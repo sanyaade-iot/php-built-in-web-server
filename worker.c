@@ -52,7 +52,7 @@ void worker_can_read(int fd, short event, void *p) {
     } else if (nparsed != ret) {
         slog(c->w->s, LOG_DEBUG, "400", 3);
         http_send_error(c, 400, "Bad Request");
-    } else if (c->request_sz > c->s->cfg->http_max_request_size) {
+    } else if (c->request_sz > MAX_REQUEST_SIZE) {
         slog(c->w->s, LOG_DEBUG, "413", 3);
         http_send_error(c, 413, "Request Entity Too Large");
     }
@@ -132,26 +132,15 @@ void worker_process_client(struct http_client *c) {
     struct worker *w = c->w;
     cmd_response_t ret = CMD_PARAM_ERROR;
 
+    slog(w->s, LOG_DEBUG, c->path, c->path_sz);
+
     switch (c->parser.method) {
         case HTTP_GET:
-            if (c->path_sz == 16 && memcmp(c->path, "/crossdomain.xml", 16) == 0) {
-                http_crossdomain(c);
-                return;
-            }
-            slog(w->s, LOG_DEBUG, c->path, c->path_sz);
             ret = cmd_run(c->w, c, c->path, c->path_sz, NULL, 0);
             break;
         case HTTP_POST:
-            slog(w->s, LOG_DEBUG, c->path, c->path_sz);
             ret = cmd_run(c->w, c, c->body, c->body_sz, NULL, 0);
             break;
-        case HTTP_PUT:
-            slog(w->s, LOG_DEBUG, c->path, c->path_sz);
-            ret = cmd_run(c->w, c, c->path, c->path_sz, c->body, c->body_sz);
-            break;
-        case HTTP_OPTIONS:
-            http_send_options(c);
-            return;
         default:
             slog(w->s, LOG_DEBUG, "405", 3);
             http_send_error(c, 405, "Method Not Allowed");

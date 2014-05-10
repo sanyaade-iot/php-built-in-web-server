@@ -226,24 +226,6 @@ static void http_response_set_connection_header(struct http_client *c, struct ht
 	http_response_set_keep_alive(r, c->keep_alive);
 }
 
-/* Adobe flash cross-domain request */
-void http_crossdomain(struct http_client *c) {
-	struct http_response *resp = http_response_init(NULL, 200, "OK");
-	char out[] = "<?xml version=\"1.0\"?>\n"
-"<!DOCTYPE cross-domain-policy SYSTEM \"http://www.macromedia.com/xml/dtds/cross-domain-policy.dtd\">\n"
-"<cross-domain-policy>\n"
-  "<allow-access-from domain=\"*\" />\n"
-"</cross-domain-policy>\n";
-
-	resp->http_version = c->http_version;
-	http_response_set_connection_header(c, resp);
-	http_response_set_header(resp, "Content-Type", "application/xml");
-	http_response_set_body(resp, out, sizeof(out)-1);
-
-	http_response_write(resp, c->fd);
-	http_client_reset(c);
-}
-
 /* Simple error response */
 void http_send_error(struct http_client *c, short code, const char *msg) {
 	struct http_response *resp = http_response_init(NULL, code, msg);
@@ -265,19 +247,6 @@ void http_response_set_keep_alive(struct http_response *r, int enabled) {
 	} else {
 		http_response_set_header(r, "Connection", "Close");
 	}
-}
-
-/* Response to HTTP OPTIONS */
-void http_send_options(struct http_client *c) {
-	struct http_response *resp = http_response_init(NULL, 200, "OK");
-	resp->http_version = c->http_version;
-	http_response_set_connection_header(c, resp);
-
-	http_response_set_header(resp, "Content-Type", "text/html");
-	http_response_set_header(resp, "Content-Length", "0");
-
-	http_response_write(resp, c->fd);
-	http_client_reset(c);
 }
 
 /**
