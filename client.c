@@ -37,20 +37,30 @@ dump_url (const char *url, const struct http_parser_url *u)
 
 static int http_client_on_url(struct http_parser *p, const char *at, size_t sz) {
     struct http_client *c = p->data;
-
-    CHECK_ALLOC(c, c->path = realloc(c->path, c->path_sz + sz + 1));
-    memcpy(c->path + c->path_sz, at, sz);
-    c->path_sz += sz;
-    c->path[c->path_sz] = 0;
-
     struct http_parser_url u;
 
-    int result = http_parser_parse_url(c->path, c->path_sz, 0, &u);
+    int result = http_parser_parse_url(at, sz, 0, &u);
     if (result != 0) {
-        printf("Parse error : %d\n", result);
+        CHECK_ALLOC(c, c->path = realloc(c->path, c->path_sz + sz + 1));
+        memcpy(c->path + c->path_sz, at, sz);
+        c->path_sz += sz;
+        c->path[c->path_sz] = 0;
     } else {
-        printf("Parse ok, result : \n");
-        dump_url(c->path, &u);
+        if ((u.field_set & (1 << 3)) != 0) {
+            CHECK_ALLOC(c, c->path = realloc(c->path, c->path_sz + u.field_data[3].len + 1));
+            memcpy(c->path + c->path_sz, at + u.field_data[3].off, u.field_data[3].len);
+            c->path_sz += u.field_data[3].len;
+            c->path[c->path_sz] = 0;
+        }
+
+        if ((u.field_set & (1 << 4)) != 0) {
+            CHECK_ALLOC(c, c->query_string = realloc(c->query_string, c->query_string_sz + u.field_data[4].len + 1));
+            memcpy(c->query_string + c->query_string_sz, at + u.field_data[4].off, u.field_data[4].len);
+            c->query_string_sz += u.field_data[4].len;
+            c->query_string[c->query_string_sz] = 0;
+        }
+
+        dump_url(at, &u);
     }
 
     return 0;
@@ -148,7 +158,7 @@ static int http_client_on_headers_complete(struct http_parser *p) {
                 len = sprintf(host_port, "%s:%d", c->w->s->cfg->http.servers[j]->server_name, c->w->s->cfg->http.servers[j]->listen);
 
                 if (c->headers[i].val_sz == len && strncmp(c->headers[i].val, host_port, c->headers[i].val_sz) == 0) {
-                    c->match_server = c->w->s->cfg->http.servers[j];
+                    c->sc = c->w->s->cfg->http.servers[j];
                     break;
                 }
 

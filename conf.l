@@ -85,6 +85,7 @@ worker_processes    {state = INT_VAL; val_int = &conf->worker_processes;}
 mimefile            {state = STRING_VAL; val_string = &conf->mimefile;}
 
 verbosity            {state = INT_VAL; val_int = &conf->verbosity;}
+logfile            {state = STRING_VAL; val_string = &conf->logfile;}
 
 <EVENTS>worker_connections {state = INT_VAL; val_int = &conf->events.worker_connections;}
 
@@ -158,7 +159,7 @@ int yywrap(){
 void set_default_config() {
     conf->user = "nobody";
     conf->worker_processes = 4;
-    conf->pid = "pbiws.pid";
+    conf->pid = "/var/run/pbiws.pid";
     conf->mimefile = "mime.types";
     conf->events.worker_connections = 768;
     conf->http.sendfile = true;
@@ -167,7 +168,7 @@ void set_default_config() {
     conf->http.gzip = false;
     //lot of configs
     conf->daemonize = false;
-    conf->logfile = "pbiws.log";
+    conf->logfile = "/var/log/pbiws.log";
     conf->verbosity = LOG_NOTICE;
 }
 

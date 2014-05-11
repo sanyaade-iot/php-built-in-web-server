@@ -18,6 +18,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <pwd.h>
 
 static void server_can_accept(int fd, short event, void *ptr);
 
@@ -82,6 +84,7 @@ static int socket_setup(struct server *s, struct server_cfg **servers) {
         /* bind */
         ret = bind(fd, (struct sockaddr*) &addr, sizeof(addr));
         if (0 != ret) {
+            slog(s, LOG_ERROR, "bind", 4);
             slog(s, LOG_ERROR, strerror(errno), 0);
             free(servers_port);
             return -1;
@@ -215,12 +218,60 @@ static void server_install_signal_handlers(struct server *s) {
     signal(SIGINT, server_handle_signal);
 }
 
+static void server_setrlimit(int maxconns) {
+    struct rlimit rlim;
+
+    /*
+     * If needed, increase rlimits to allow as many connections
+     * as needed.
+     */
+
+    if (getrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+        fprintf(stderr, "failed to getrlimit number of files\n");
+        exit(EXIT_FAILURE);
+    } else {
+        int maxfiles = maxconns;
+        if (rlim.rlim_cur < maxfiles)
+            rlim.rlim_cur = maxfiles + 3;
+        if (rlim.rlim_max < rlim.rlim_cur)
+            rlim.rlim_max = rlim.rlim_cur;
+        if (setrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+            fprintf(stderr, "failed to set rlimit for open files. Try running as root or requesting smaller maxconns value.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+/* lose root privileges if we have them */
+static int server_setuid(char *username) {
+    struct passwd *pw;
+
+    if (getuid() == 0 || geteuid() == 0) {
+        if (username == 0 || *username == '\0') {
+            fprintf(stderr, "can't run as root without the user directive\n");
+            return -1;
+        }
+        if ((pw = getpwnam(username)) == 0) {
+            fprintf(stderr, "can't find the user %s to switch to\n", username);
+            return -1;
+        }
+        if (setgid(pw->pw_gid) < 0 || setuid(pw->pw_uid) < 0) {
+            fprintf(stderr, "failed to assume identity of user %s\n", username);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int server_start(struct server *s) {
     int i, ret;
 
-    /* initialize libevent */
-    s->base = event_base_new();
 
+    /* setrlimit */
+    server_setrlimit(8192);
+
+    /* daemonize */
     if (s->cfg->daemonize) {
         server_daemonize(s->cfg->pid);
 
@@ -235,10 +286,20 @@ int server_start(struct server *s) {
     signal(SIGPIPE, SIG_IGN);
 #endif
 
+    /* lose root privileges if we have them */
+    /*ret = server_setuid(s->cfg->user);
+    if(ret < 0) {
+        return -1;
+    }*/
+
+    /* slog init */
     slog_init(s);
 
     /* install signal handlers */
     server_install_signal_handlers(s);
+
+    /* initialize libevent */
+    s->base = event_base_new();
 
     /* start worker threads */
     for (i = 0; i < s->cfg->worker_processes; ++i) {
